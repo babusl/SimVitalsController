@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>MedSim Controller</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  :root{--bg:#0f0f12;--surface:#1a1a22;--surface2:#22222e;--border:#2e2e3e;--text:#e8e8f0;--sub:#888;--green:#00e676;--red:#ff4444;--blue:#40c8ff;--yellow:#ffd740;--orange:#ff9100;--purple:#c940ff;}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding-bottom:40px;}
+  header{background:var(--surface);padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
+  header h1{font-size:16px;font-weight:700;}
+  #status{font-size:12px;padding:3px 8px;border-radius:99px;}
+  #status.live{background:#003a00;color:var(--green);}
+  #status.off{background:#3a0000;color:var(--red);}
+  .section-title{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--sub);padding:14px 16px 6px;text-transform:uppercase;}
+  #vitals-strip{display:flex;flex-wrap:wrap;gap:1px;background:var(--border);border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:2px;}
+  .vs-item{flex:1 1 30%;background:var(--surface);padding:8px 10px;text-align:center;}
+  .vs-label{font-size:9px;letter-spacing:1px;color:var(--sub);}
+  .vs-val{font-size:20px;font-weight:700;}
+  .vs-hr{color:var(--green);}.vs-bp{color:var(--red);}.vs-spo2{color:var(--blue);}.vs-rr{color:#aaffaa;}.vs-co2{color:var(--yellow);}
+  .scenario-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:0 16px;}
+  .btn{border:none;border-radius:10px;padding:12px 10px;font-size:13px;font-weight:600;cursor:pointer;text-align:center;line-height:1.3;transition:transform 0.08s,filter 0.08s;display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .btn:active{transform:scale(0.95);filter:brightness(0.85);}
+  .btn .sub{font-size:10px;font-weight:400;opacity:0.75;}
+  .btn-normal{background:#1a3a1a;color:var(--green);border:1px solid #2a5a2a;}
+  .btn-arrest{background:#3a0000;color:#ff6666;border:1px solid #660000;}
+  .btn-tachy{background:#2a1a00;color:var(--yellow);border:1px solid #553300;}
+  .btn-shock{background:#1a0030;color:var(--purple);border:1px solid #330055;}
+  .btn-resp{background:#001a2a;color:var(--blue);border:1px solid #003355;}
+  .btn-brady{background:#0a0a2a;color:#8888ff;border:1px solid #22226a;}
+  .btn-htn{background:#2a0a0a;color:#ff8888;border:1px solid #550a0a;}
+  .btn-rosc{background:#002a15;color:#44ffaa;border:1px solid #005530;}
+  .vitals-panel{padding:0 16px;display:flex;flex-direction:column;gap:12px;}
+  .vital-row{background:var(--surface);border-radius:10px;padding:10px 12px;border:1px solid var(--border);}
+  .vital-row-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .vital-row-label{font-size:12px;font-weight:700;letter-spacing:1px;}
+  .vital-row-value{font-size:22px;font-weight:800;min-width:70px;text-align:right;}
+  input[type=range]{width:100%;height:6px;-webkit-appearance:none;appearance:none;border-radius:3px;outline:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid var(--bg);}
+  .range-green{background:linear-gradient(to right,#003a00,#00e676);}.range-green::-webkit-slider-thumb{background:var(--green);}
+  .range-red{background:linear-gradient(to right,#3a0000,#ff4444);}.range-red::-webkit-slider-thumb{background:var(--red);}
+  .range-blue{background:linear-gradient(to right,#001a2a,#40c8ff);}.range-blue::-webkit-slider-thumb{background:var(--blue);}
+  .range-yellow{background:linear-gradient(to right,#1a1a00,#ffd740);}.range-yellow::-webkit-slider-thumb{background:var(--yellow);}
+  .range-orange{background:linear-gradient(to right,#1a0800,#ff9100);}.range-orange::-webkit-slider-thumb{background:var(--orange);}
+  .bp-sliders{display:flex;gap:10px;}.bp-sliders>div{flex:1;}
+  .bp-mini-label{font-size:9px;color:var(--sub);margin-bottom:4px;}
+  .rhythm-select-wrap{padding:0 16px;}
+  .rhythm-pills{display:flex;flex-wrap:wrap;gap:6px;}
+  .pill{padding:7px 14px;border-radius:99px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.1s;}
+  .pill:active{transform:scale(0.95);}
+  .pill.active{background:var(--green);color:#000;border-color:var(--green);}
+  .interventions{padding:0 16px;display:flex;flex-direction:column;gap:10px;}
+  .interv-group{background:var(--surface);border-radius:10px;border:1px solid var(--border);overflow:hidden;}
+  .interv-group-title{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--sub);padding:8px 12px 4px;background:var(--surface2);}
+  .interv-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border);}
+  .interv-row:first-of-type{border-top:none;}
+  .interv-name{flex:1;font-size:13px;font-weight:600;line-height:1.2;}
+  .interv-name .route{font-size:10px;color:var(--sub);font-weight:400;}
+  .dose-input{width:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;font-weight:700;text-align:center;padding:5px 4px;outline:none;}
+  .dose-unit{font-size:10px;color:var(--sub);min-width:36px;}
+  .btn-give{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:7px 12px;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.1s;white-space:nowrap;}
+  .btn-give:active{transform:scale(0.95);background:#33334a;}
+  .btn-give.success{background:#003a00;color:var(--green);}
+  .elec-row{display:flex;gap:8px;padding:8px 12px;border-top:1px solid var(--border);align-items:center;}
+  .btn-elec{flex:1;padding:10px 6px;border-radius:8px;border:1px solid;font-size:12px;font-weight:700;cursor:pointer;text-align:center;transition:all 0.1s;}
+  .btn-elec:active{transform:scale(0.95);filter:brightness(0.8);}
+  .btn-defib{background:#3a0000;color:#ff6666;border-color:#660000;}
+  .btn-cardiovert{background:#2a1a00;color:var(--yellow);border-color:#553300;}
+  .btn-pace{background:#001a2a;color:var(--blue);border-color:#003355;}
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:99px;font-size:13px;font-weight:600;opacity:0;transition:opacity 0.3s;pointer-events:none;border:1px solid #444;z-index:9999;}
+  #toast.show{opacity:1;}
+  #room-setup{position:fixed;inset:0;background:#0f0f12;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:16px;}
+  #room-setup h2{font-size:22px;font-weight:800;color:#fff;}
+  #room-setup p{font-size:13px;color:#888;text-align:center;max-width:300px;line-height:1.7;}
+  #room-input{background:#1a1a22;border:2px solid #333;border-radius:10px;color:#fff;font-size:22px;font-weight:800;letter-spacing:3px;text-align:center;padding:12px 20px;width:100%;max-width:300px;outline:none;text-transform:uppercase;}
+  #room-input:focus{border-color:#00e676;}
+  #connect-btn{background:#00e676;color:#000;border:none;border-radius:10px;padding:14px 0;font-size:16px;font-weight:800;cursor:pointer;width:100%;max-width:300px;}
+  #room-err{color:#ff4444;font-size:12px;min-height:16px;}
+  .hint{font-size:11px;color:#555;text-align:center;max-width:300px;line-height:1.7;}
+</style>
+</head>
+<body>
+
+<div id="room-setup">
+  <div style="font-size:40px">&#127973;</div>
+  <h2>MedSim Controller</h2>
+  <p>Enter the <strong style="color:#fff">Room Code</strong> shown in the top-left corner of the monitor screen.</p>
+  <input id="room-input" type="text" placeholder="MEDSIM-XXXXX" maxlength="20" autocomplete="off" autocorrect="off" spellcheck="false">
+  <button id="connect-btn" onclick="startConnect()">CONNECT TO MONITOR</button>
+  <div id="room-err"></div>
+  <div class="hint">Testing on the same computer? Open both files in the same browser — they connect instantly without needing the internet.</div>
+</div>
+
+<header>
+  <h1>&#127973; MedSim Controller</h1>
+  <div id="status" class="off">&#9679; OFFLINE</div>
+</header>
+
+<div id="vitals-strip">
+  <div class="vs-item"><div class="vs-label">HR</div><div class="vs-val vs-hr" id="s-hr">--</div></div>
+  <div class="vs-item"><div class="vs-label">BP</div><div class="vs-val vs-bp" id="s-bp">--/--</div></div>
+  <div class="vs-item"><div class="vs-label">SpO2</div><div class="vs-val vs-spo2" id="s-spo2">--%</div></div>
+  <div class="vs-item"><div class="vs-label">RR</div><div class="vs-val vs-rr" id="s-rr">--</div></div>
+  <div class="vs-item"><div class="vs-label">EtCO2</div><div class="vs-val vs-co2" id="s-co2">--</div></div>
+  <div class="vs-item"><div class="vs-label">RHYTHM</div><div class="vs-val" style="font-size:14px" id="s-rhy">---</div></div>
+</div>
+
+<div class="section-title">&#9889; Clinical Scenarios</div>
+<div class="scenario-grid">
+  <button class="btn btn-normal"  onclick="scenario('normal')">&#10003; Normal Sinus<span class="sub">HR 72 | BP 120/80 | SpO2 98</span></button>
+  <button class="btn btn-arrest"  onclick="scenario('cardiac_arrest_vfib')">&#128128; V-Fib Arrest<span class="sub">No pulse | CPR needed</span></button>
+  <button class="btn btn-arrest"  onclick="scenario('asystole')">&#128128; Asystole<span class="sub">Flatline | CPR needed</span></button>
+  <button class="btn btn-arrest"  onclick="scenario('cardiac_arrest_pea')">&#128128; PEA Arrest<span class="sub">Organized rhythm | no pulse</span></button>
+  <button class="btn btn-tachy"   onclick="scenario('vtach')">&#9888; V-Tach<span class="sub">HR 155 | BP 82/52</span></button>
+  <button class="btn btn-tachy"   onclick="scenario('svt')">&#9889; SVT<span class="sub">HR 188 | Narrow complex</span></button>
+  <button class="btn btn-tachy"   onclick="scenario('afib')">&#8767; A-Fib<span class="sub">HR 112 | Irregular</span></button>
+  <button class="btn btn-tachy"   onclick="scenario('afib_rvr')">&#8767; A-Fib RVR<span class="sub">HR 148 | Rapid</span></button>
+  <button class="btn btn-brady"   onclick="scenario('bradycardia')">Bradycardia<span class="sub">HR 36 | BP 78/48</span></button>
+  <button class="btn btn-shock"   onclick="scenario('hypovolemic_shock')">Hypovolemic Shock<span class="sub">HR 128 | BP 78/48</span></button>
+  <button class="btn btn-shock"   onclick="scenario('septic_shock')">Septic Shock<span class="sub">HR 118 | BP 84/50 | 39.3C</span></button>
+  <button class="btn btn-shock"   onclick="scenario('anaphylaxis')">Anaphylaxis<span class="sub">HR 135 | BP 68/38 | SpO2 86</span></button>
+  <button class="btn btn-resp"    onclick="scenario('pulm_embolism')">Pulm. Embolism<span class="sub">HR 118 | SpO2 85</span></button>
+  <button class="btn btn-resp"    onclick="scenario('tension_ptx')">Tension PTX<span class="sub">HR 130 | SpO2 82</span></button>
+  <button class="btn btn-htn"     onclick="scenario('hypertensive_crisis')">HTN Crisis<span class="sub">BP 225/138</span></button>
+  <button class="btn btn-rosc"    onclick="scenario('rosc')">ROSC<span class="sub">HR 58 | BP 88/56 | Post-arrest</span></button>
+</div>
+
+<div class="section-title">&#127917; Manual Vital Adjustment</div>
+<div class="vitals-panel">
+  <div class="vital-row">
+    <div class="vital-row-header"><span class="vital-row-label" style="color:var(--green)">HEART RATE</span><span class="vital-row-value" style="color:var(--green)" id="lbl-hr">72</span></div>
+    <input type="range" id="sl-hr" class="range-green" min="0" max="300" value="72" oninput="updateLabel('hr',this.value)" onchange="sendVital('hr',this.value)">
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);margin-top:3px"><span>0</span><span>bpm</span><span>300</span></div>
+  </div>
+  <div class="vital-row">
+    <div class="vital-row-header"><span class="vital-row-label" style="color:var(--red)">BLOOD PRESSURE</span><span class="vital-row-value" style="color:var(--red)" id="lbl-bp">120/80</span></div>
+    <div class="bp-sliders">
+      <div><div class="bp-mini-label">SYSTOLIC</div><input type="range" id="sl-sbp" class="range-red" min="0" max="280" value="120" oninput="updateBPLabel()" onchange="sendBP()"></div>
+      <div><div class="bp-mini-label">DIASTOLIC</div><input type="range" id="sl-dbp" class="range-red" min="0" max="180" value="80" oninput="updateBPLabel()" onchange="sendBP()"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);margin-top:3px"><span>0/0</span><span>mmHg</span><span>280/180</span></div>
+  </div>
+  <div class="vital-row">
+    <div class="vital-row-header"><span class="vital-row-label" style="color:var(--blue)">SpO2</span><span class="vital-row-value" style="color:var(--blue)" id="lbl-spo2">98%</span></div>
+    <input type="range" id="sl-spo2" class="range-blue" min="50" max="100" value="98" oninput="updateLabel('spo2',this.value,'%')" onchange="sendVital('spo2',this.value)">
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);margin-top:3px"><span>50%</span><span>%</span><span>100%</span></div>
+  </div>
+  <div class="vital-row">
+    <div class="vital-row-header"><span class="vital-row-label" style="color:#aaffaa">RESP RATE</span><span class="vital-row-value" style="color:#aaffaa" id="lbl-rr">14</span></div>
+    <input type="range" id="sl-rr" class="range-green" min="0" max="60" value="14" oninput="updateLabel('rr',this.value)" onchange="sendVital('rr',this.value)">
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);margin-top:3px"><span>0</span><span>br/min</span><span>60</span></div>
+  </div>
+  <div class="vital-row">
+    <div class="vital-row-header"><span class="vital-row-label" style="color:var(--yellow)">EtCO2</span><span class="vital-row-value" style="color:var(--yellow)" id="lbl-etco2">35</span></div>
+    <input type="range" id="sl-etco2" class="range-yellow" min="0" max="80" value="35" oninput="updateLabel('etco2',this.value)" onchange="sendVital('etco2',this.value)">
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);margin-top:3px"><span>0</span><span>mmHg</span><span>80</span></div>
+  </div>
+  <div class="vital-row">
+    <div class="vital-row-header"><span class="vital-row-label" style="color:var(--orange)">TEMP</span><span class="vital-row-value" style="color:var(--orange)" id="lbl-temp">37.0&#176;C</span></div>
+    <input type="range" id="sl-temp" class="range-orange" min="90" max="108" step="0.2" value="98.6" oninput="updateTempLabel(this.value)" onchange="sendVital('temp',this.value)">
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);margin-top:3px"><span>32&#176;C</span><span>&#176;C</span><span>42&#176;C</span></div>
+  </div>
+</div>
+
+<div class="section-title" style="margin-top:4px">&#8767; Rhythm</div>
+<div class="rhythm-select-wrap">
+  <div class="rhythm-pills">
+    <div class="pill active" onclick="setRhythm('NSR')">NSR</div>
+    <div class="pill" onclick="setRhythm('AFib')">A-Fib</div>
+    <div class="pill" onclick="setRhythm('SVT')">SVT</div>
+    <div class="pill" onclick="setRhythm('VTach')">V-Tach</div>
+    <div class="pill" onclick="setRhythm('VFib')">V-Fib</div>
+    <div class="pill" onclick="setRhythm('Brady')">Brady</div>
+    <div class="pill" onclick="setRhythm('PEA')">PEA</div>
+    <div class="pill" onclick="setRhythm('Asystole')">Asystole</div>
+    <div class="pill" onclick="setRhythm('Paced')">Paced</div>
+  </div>
+</div>
+
+<div class="section-title" style="margin-top:4px">&#128138; Interventions</div>
+<div class="interventions">
+  <div class="interv-group">
+    <div class="interv-group-title">VASOPRESSORS / INOTROPES</div>
+    <div class="interv-row"><div class="interv-name">Epinephrine<span class="route"> push</span></div><input class="dose-input" id="d-epi_push" type="number" value="10" min="1"><span class="dose-unit">mcg</span><button class="btn-give" onclick="give('epi_push','epi_push')">GIVE</button></div>
+    <div class="interv-row"><div class="interv-name">Epinephrine<span class="route"> infusion</span></div><input class="dose-input" id="d-epi_infusion" type="number" value="0.1" step="0.05"><span class="dose-unit">mcg/kg/min</span><button class="btn-give" onclick="give('epi_infusion','epi_infusion')">SET</button></div>
+    <div class="interv-row"><div class="interv-name">Norepinephrine<span class="route"> infusion</span></div><input class="dose-input" id="d-norepi" type="number" value="0.1" step="0.05"><span class="dose-unit">mcg/kg/min</span><button class="btn-give" onclick="give('norepi','norepi')">SET</button></div>
+    <div class="interv-row"><div class="interv-name">Phenylephrine<span class="route"> infusion</span></div><input class="dose-input" id="d-phenylephrine" type="number" value="0.5" step="0.1"><span class="dose-unit">mcg/kg/min</span><button class="btn-give" onclick="give('phenylephrine','phenylephrine')">SET</button></div>
+    <div class="interv-row"><div class="interv-name">Vasopressin<span class="route"> infusion</span></div><input class="dose-input" id="d-vasopressin" type="number" value="0.03" step="0.01"><span class="dose-unit">units/min</span><button class="btn-give" onclick="give('vasopressin','vasopressin')">SET</button></div>
+    <div class="interv-row"><div class="interv-name">Dopamine<span class="route"> infusion</span></div><input class="dose-input" id="d-dopamine" type="number" value="5" step="1"><span class="dose-unit">mcg/kg/min</span><button class="btn-give" onclick="give('dopamine','dopamine')">SET</button></div>
+    <div class="interv-row"><div class="interv-name">Dobutamine<span class="route"> infusion</span></div><input class="dose-input" id="d-dobutamine" type="number" value="5" step="1"><span class="dose-unit">mcg/kg/min</span><button class="btn-give" onclick="give('dobutamine','dobutamine')">SET</button></div>
+    <div class="interv-row"><div class="interv-name">Epi — anaphylaxis<span class="route"> IM</span></div><input class="dose-input" id="d-epi_anaphylaxis" type="number" value="0.3" step="0.1"><span class="dose-unit">mg</span><button class="btn-give" onclick="give('epi_anaphylaxis','epi_anaphylaxis')">GIVE</button></div>
+  </div>
+  <div class="interv-group">
+    <div class="interv-group-title">ANTIARRHYTHMICS / RATE CONTROL</div>
+    <div class="interv-row"><div class="interv-name">Adenosine<span class="route"> rapid IV push</span></div><input class="dose-input" id="d-adenosine" type="number" value="6" step="6" min="6" max="12"><span class="dose-unit">mg</span><button class="btn-give" onclick="give('adenosine','adenosine')">PUSH</button></div>
+    <div class="interv-row"><div class="interv-name">Amiodarone<span class="route"> IV bolus</span></div><input class="dose-input" id="d-amiodarone" type="number" value="150" step="50"><span class="dose-unit">mg</span><button class="btn-give" onclick="give('amiodarone','amiodarone')">GIVE</button></div>
+    <div class="interv-row"><div class="interv-name">Lidocaine<span class="route"> IV</span></div><input class="dose-input" id="d-lidocaine" type="number" value="1.5" step="0.5"><span class="dose-unit">mg/kg</span><button class="btn-give" onclick="give('lidocaine','lidocaine')">GIVE</button></div>
+    <div class="interv-row"><div class="interv-name">Metoprolol<span class="route"> IV</span></div><input class="dose-input" id="d-metoprolol" type="number" value="5" step="5"><span class="dose-unit">mg</span><button class="btn-give" onclick="give('metoprolol','metoprolol')">GIVE</button></div>
+    <div class="interv-row"><div class="interv-name">Diltiazem<span class="route"> IV</span></div><input class="dose-input" id="d-diltiazem" type="number" value="20" step="5"><span class="dose-unit">mg</span><button class="btn-give" onclick="give('diltiazem','diltiazem')">GIVE</button></div>
+    <div class="interv-row"><div class="interv-name">Atropine<span class="route"> IV</span></div><input class="dose-input" id="d-atropine" type="number" value="0.5" step="0.5"><span class="dose-unit">mg</span><button class="btn-give" onclick="give('atropine','atropine')">GIVE</button></div>
+  </div>
+  <div class="interv-group">
+    <div class="interv-group-title">SEDATION / AIRWAY</div>
+    <div class="interv-row"><div class="interv-name">Ketamine<span class="route"> IV</span></div><input class="dose-input" id="d-ketamine" type="number" value="1.5" step="0.5"><span class="dose-unit">mg/kg</span><button class="btn-give" onclick="give('ketamine','ketamine')">GIVE</button></div>
+    <div class="interv-row"><div class="interv-name">Propofol<span class="route"> IV</span></div><input class="dose-input" id="d-propofol" type="number" value="200" step="50"><span class="dose-unit">mg</span><button class="btn-give" onclick="give('propofol','propofol')">GIVE</button></div>
+    <div class="interv-row"><div class="interv-name">Succinylcholine<span class="route"> IV</span></div><input class="dose-input" id="d-succinylcholine" type="number" value="1.5" step="0.5"><span class="dose-unit">mg/kg</span><button class="btn-give" onclick="give('succinylcholine','succinylcholine')">GIVE</button></div>
+    <div class="interv-row"><div class="interv-name">Successful Intubation<span class="route"> confirm</span></div><span class="dose-unit"></span><button class="btn-give" onclick="give('intubation','intubation',1)">CONFIRM</button></div>
+  </div>
+  <div class="interv-group">
+    <div class="interv-group-title">FLUIDS / BLOOD PRODUCTS</div>
+    <div class="interv-row"><div class="interv-name">IV Fluid Bolus<span class="route"> NS/LR</span></div><input class="dose-input" id="d-fluid" type="number" value="500" step="250"><span class="dose-unit">mL</span><button class="btn-give" onclick="give('fluid','fluid')">RUN</button></div>
+    <div class="interv-row"><div class="interv-name">pRBC Transfusion</div><input class="dose-input" id="d-blood" type="number" value="1" step="1" min="1"><span class="dose-unit">units</span><button class="btn-give" onclick="give('blood','blood')">GIVE</button></div>
+    <div class="interv-row"><div class="interv-name">Oxygen<span class="route"> supplemental</span></div><input class="dose-input" id="d-o2" type="number" value="10" step="5" min="1" max="100"><span class="dose-unit">L/min</span><button class="btn-give" onclick="give('o2','o2')">APPLY</button></div>
+  </div>
+  <div class="interv-group">
+    <div class="interv-group-title">ANTIHYPERTENSIVES</div>
+    <div class="interv-row"><div class="interv-name">Nitroglycerin<span class="route"> infusion</span></div><input class="dose-input" id="d-nitroglycerin" type="number" value="50" step="25"><span class="dose-unit">mcg/min</span><button class="btn-give" onclick="give('nitroglycerin','nitroglycerin')">SET</button></div>
+    <div class="interv-row"><div class="interv-name">Nicardipine<span class="route"> infusion</span></div><input class="dose-input" id="d-nicardipine" type="number" value="5" step="1"><span class="dose-unit">mg/hr</span><button class="btn-give" onclick="give('nicardipine','nicardipine')">SET</button></div>
+    <div class="interv-row"><div class="interv-name">Labetalol<span class="route"> IV</span></div><input class="dose-input" id="d-labetalol" type="number" value="20" step="20"><span class="dose-unit">mg</span><button class="btn-give" onclick="give('labetalol','labetalol')">GIVE</button></div>
+  </div>
+  <div class="interv-group">
+    <div class="interv-group-title">OTHER</div>
+    <div class="interv-row"><div class="interv-name">Naloxone (Narcan)<span class="route"> IV/IM</span></div><input class="dose-input" id="d-narcan" type="number" value="0.4" step="0.4"><span class="dose-unit">mg</span><button class="btn-give" onclick="give('narcan','narcan')">GIVE</button></div>
+  </div>
+  <div class="interv-group">
+    <div class="interv-group-title">ELECTRICAL THERAPIES</div>
+    <div class="elec-row">
+      <div style="flex:2"><div style="font-size:12px;font-weight:600;margin-bottom:4px">Energy (J)</div><input class="dose-input" id="d-elec" type="number" value="200" step="50" style="width:80px"></div>
+      <button class="btn-elec btn-defib" onclick="giveElec('defib')">&#9889; DEFIB<br><span style="font-size:10px">Unsync (VFib)</span></button>
+      <button class="btn-elec btn-cardiovert" onclick="giveElec('cardioversion')">&#9889; CARDIOVERT<br><span style="font-size:10px">Synchronized</span></button>
+    </div>
+    <div class="elec-row">
+      <div style="flex:2"><div style="font-size:12px;font-weight:600;margin-bottom:4px">Pacing Rate (bpm)</div><input class="dose-input" id="d-pace" type="number" value="70" step="10" style="width:80px"></div>
+      <button class="btn-elec btn-pace" onclick="givePace()" style="flex:2">TRANSCUTANEOUS<br><span style="font-size:10px">Pacemaker</span></button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+var mqttClient=null,mqttOk=false,bc=null,ROOM='',TOPIC_STATE,TOPIC_CMD;
+
+document.getElementById('room-input').addEventListener('keydown',function(e){if(e.key==='Enter')startConnect();});
+
+function startConnect(){
+  var val=document.getElementById('room-input').value.trim().toUpperCase();
+  if(!val||val.length<4){document.getElementById('room-err').textContent='Please enter the Room Code shown on the monitor.';return;}
+  ROOM=val;
+  TOPIC_STATE='medsim/'+ROOM+'/state';
+  TOPIC_CMD='medsim/'+ROOM+'/cmd';
+  document.getElementById('room-setup').style.display='none';
+
+  // BroadcastChannel — instant when both files open in same browser
+  try{
+    bc=new BroadcastChannel('medsim-'+ROOM);
+    bc.onmessage=function(e){if(e.data&&e.data.type==='state')updateUI(e.data.data);};
+    document.getElementById('status').textContent='&#9679; LOCAL';
+    document.getElementById('status').className='live';
+  }catch(e){}
+
+  connectMQTT();
+  // Ask monitor to immediately send its current state
+  setTimeout(function(){send({type:'ping'});},600);
+}
+
+var BROKERS=['wss://test.mosquitto.org:8081','wss://broker.emqx.io:8084/mqtt','wss://broker.hivemq.com:8884/mqtt'];
+var bidx=0;
+function connectMQTT(){
+  try{
+    mqttClient=mqtt.connect(BROKERS[bidx%BROKERS.length],{clientId:'ctrl_'+Math.random().toString(36).slice(2,10),reconnectPeriod:0,connectTimeout:8000,keepalive:30});
+  }catch(e){setTimeout(nextBroker,2000);return;}
+  mqttClient.on('connect',function(){
+    mqttOk=true;
+    document.getElementById('status').textContent='&#9679; LIVE';
+    document.getElementById('status').className='live';
+    mqttClient.subscribe(TOPIC_STATE,function(){});
+    send({type:'ping'});
+  });
+  mqttClient.on('error',function(){nextBroker();});
+  mqttClient.on('close',function(){
+    mqttOk=false;
+    if(!bc){document.getElementById('status').textContent='&#9679; OFFLINE';document.getElementById('status').className='off';}
+    setTimeout(nextBroker,6000);
+  });
+  mqttClient.on('message',function(t,buf){try{var m=JSON.parse(buf.toString());if(m.type==='state')updateUI(m.data);}catch(e){}});
+}
+function nextBroker(){bidx++;if(mqttClient){try{mqttClient.end(true);}catch(e){}mqttClient=null;}mqttOk=false;if(ROOM)setTimeout(connectMQTT,1000);}
+
+function send(msg){
+  if(bc){try{bc.postMessage(msg);}catch(e){}}
+  if(mqttClient&&mqttOk){try{mqttClient.publish(TOPIC_CMD,JSON.stringify(msg));}catch(e){}}
+}
+
+function updateUI(s){
+  var noCirc=(s.rhythm==='VFib'||s.rhythm==='Asystole');
+  document.getElementById('s-hr').textContent=noCirc?'---':s.hr;
+  document.getElementById('s-bp').textContent=s.sbp===0?'---/---':s.sbp+'/'+s.dbp;
+  document.getElementById('s-spo2').textContent=s.spo2+'%';
+  document.getElementById('s-rr').textContent=s.rr;
+  document.getElementById('s-co2').textContent=s.etco2;
+  document.getElementById('s-rhy').textContent=s.rhythm;
+  document.getElementById('sl-hr').value=s.hr;document.getElementById('lbl-hr').textContent=s.hr;
+  document.getElementById('sl-sbp').value=s.sbp;document.getElementById('sl-dbp').value=s.dbp;
+  document.getElementById('lbl-bp').textContent=s.sbp+'/'+s.dbp;
+  document.getElementById('sl-spo2').value=s.spo2;document.getElementById('lbl-spo2').textContent=s.spo2+'%';
+  document.getElementById('sl-rr').value=s.rr;document.getElementById('lbl-rr').textContent=s.rr;
+  document.getElementById('sl-etco2').value=s.etco2;document.getElementById('lbl-etco2').textContent=s.etco2;
+  document.getElementById('sl-temp').value=s.temp;
+  document.getElementById('lbl-temp').textContent=((+s.temp-32)*5/9).toFixed(1)+'&#176;C';
+  document.querySelectorAll('.pill').forEach(function(p){p.classList.toggle('active',p.textContent===s.rhythm);});
+}
+function updateLabel(k,v,sfx){document.getElementById('lbl-'+k).textContent=v+(sfx||'');}
+function updateBPLabel(){document.getElementById('lbl-bp').textContent=document.getElementById('sl-sbp').value+'/'+document.getElementById('sl-dbp').value;}
+function updateTempLabel(v){document.getElementById('lbl-temp').textContent=((+v-32)*5/9).toFixed(1)+'&#176;C';}
+function sendVital(k,v){var d={};d[k]=Number(v);send({type:'update',data:d});}
+function sendBP(){send({type:'update',data:{sbp:Number(document.getElementById('sl-sbp').value),dbp:Number(document.getElementById('sl-dbp').value)}});}
+function scenario(name){send({type:'scenario',scenario:name});toast(name.replace(/_/g,' '));}
+function setRhythm(r){send({type:'update',data:{rhythm:r}});}
+function give(inputId,drug,fixedDose){
+  var dose=fixedDose!==undefined?fixedDose:Number(document.getElementById('d-'+inputId).value);
+  if(isNaN(dose))return;
+  send({type:'intervention',drug:drug,dose:dose});
+  var btn=event.target,orig=btn.textContent;
+  btn.classList.add('success');btn.textContent='&#10003;';
+  setTimeout(function(){btn.classList.remove('success');btn.textContent=orig;},800);
+  toast(drug.replace(/_/g,' ')+' '+dose);
+}
+function giveElec(type){var j=Number(document.getElementById('d-elec').value);send({type:'intervention',drug:type,dose:j});toast(type+' '+j+'J');}
+function givePace(){var r=Number(document.getElementById('d-pace').value);send({type:'intervention',drug:'pacing',dose:r});toast('Pacing '+r+' bpm');}
+var toastTimer;
+function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(function(){el.classList.remove('show');},2000);}
+</script>
+</body>
+</html>
