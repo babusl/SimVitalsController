@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+<title>MedSim Controller</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{--bg:#0f0f12;--sf:#1a1a22;--sf2:#22222e;--bd:#2e2e3e;--tx:#e8e8f0;--sub:#888;
+  --gr:#00e676;--rd:#ff4444;--bl:#40c8ff;--yl:#ffd740;--or:#ff9100;--pu:#c940ff}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:600px;margin:0 auto;padding-bottom:60px}
+#setup{position:fixed;inset:0;background:#0a0a0a;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:32px}
+#setup h1{font-size:20px;font-weight:800;color:#fff;letter-spacing:2px}
+#setup p{font-size:13px;color:#666;text-align:center;max-width:300px;line-height:1.9}
+#setup-input{background:#111;border:2px solid var(--gr);border-radius:10px;color:#00ff44;font-size:26px;font-weight:800;letter-spacing:5px;text-align:center;padding:12px 20px;width:100%;max-width:340px;outline:none;text-transform:uppercase;font-family:'Courier New',monospace}
+#setup-btn{background:var(--gr);color:#000;border:none;border-radius:10px;padding:14px 0;font-size:16px;font-weight:800;cursor:pointer;width:100%;max-width:340px}
+#setup-msg{font-size:12px;color:#888;min-height:20px;text-align:center}
+header{background:var(--sf);padding:10px 16px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}
+header h1{font-size:15px;font-weight:700}
+#status{font-size:12px;padding:3px 10px;border-radius:99px;font-weight:700}
+#status.live{background:#003a00;color:var(--gr)}#status.off{background:#3a0000;color:var(--rd)}#status.try{background:#2a2000;color:var(--yl)}
+/* Live vitals strip */
+#vs{display:flex;flex-wrap:wrap;gap:1px;background:var(--bd);border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
+.vsi{flex:1 1 30%;background:var(--sf);padding:7px 8px;text-align:center}
+.vsl{font-size:9px;letter-spacing:1px;color:var(--sub)}.vsv{font-size:18px;font-weight:700}
+/* Section titles */
+.stitle{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--sub);padding:12px 16px 5px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+.stitle .collapse{font-size:10px;color:#555;cursor:pointer;font-weight:400;letter-spacing:0}
+.section-body{overflow:hidden;transition:max-height .25s ease}
+.section-body.hidden{max-height:0!important}
+/* Grid buttons */
+.sgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;padding:0 16px}
+.btn{border:none;border-radius:10px;padding:11px 8px;font-size:12px;font-weight:600;cursor:pointer;text-align:center;line-height:1.3;display:flex;flex-direction:column;align-items:center;gap:2px}
+.btn:active{filter:brightness(.8)}.btn .sub{font-size:9px;font-weight:400;opacity:.7}
+/* Button color classes */
+.bn{background:#1a3a1a;color:var(--gr);border:1px solid #2a5a2a}
+.ba{background:#3a0000;color:#ff6666;border:1px solid #660000}
+.bt{background:#2a1a00;color:var(--yl);border:1px solid #553300}
+.bsh{background:#1a0030;color:var(--pu);border:1px solid #330055}
+.br2{background:#001a2a;color:var(--bl);border:1px solid #003355}
+.bb2{background:#0a0a2a;color:#8888ff;border:1px solid #22226a}
+.bh{background:#2a0a0a;color:#ff8888;border:1px solid #550a0a}
+.bro{background:#002a15;color:#44ffaa;border:1px solid #005530}
+.bvp{background:#1a0800;color:#ff9100;border:1px solid #3a1500}
+.bvn{background:#003a15;color:#44ffaa;border:1px solid #005530}
+.bvr{background:#3a0000;color:#ff6666;border:1px solid #660000}
+/* Toggle buttons */
+.toggrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;padding:0 16px}
+.togbtn{border:none;border-radius:10px;padding:11px 8px;font-size:12px;font-weight:700;cursor:pointer;text-align:center;background:var(--sf2);color:var(--sub);border:1px solid var(--bd)}
+.togbtn:active{filter:brightness(.8)}.togbtn.on{background:#003a00;color:var(--gr);border-color:#2a5a2a}
+/* Vitals sliders */
+.vpanel{padding:0 16px;display:flex;flex-direction:column;gap:10px}
+.vrow{background:var(--sf);border-radius:10px;padding:9px 11px;border:1px solid var(--bd)}
+.vrh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.vrl{font-size:11px;font-weight:700;letter-spacing:1px}.vrv{font-size:20px;font-weight:800;min-width:60px;text-align:right}
+input[type=range]{width:100%;height:6px;-webkit-appearance:none;border-radius:3px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;cursor:pointer;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,0.8)}
+.rg{background:linear-gradient(to right,#003a00,var(--gr))}.rg::-webkit-slider-thumb{background:var(--gr)}
+.rrd{background:linear-gradient(to right,#3a0000,var(--rd))}.rrd::-webkit-slider-thumb{background:var(--rd)}
+.rbl{background:linear-gradient(to right,#001a2a,var(--bl))}.rbl::-webkit-slider-thumb{background:var(--bl)}
+.ryl{background:linear-gradient(to right,#1a1a00,var(--yl))}.ryl::-webkit-slider-thumb{background:var(--yl)}
+.ror{background:linear-gradient(to right,#1a0800,var(--or))}.ror::-webkit-slider-thumb{background:var(--or)}
+.bps{display:flex;gap:8px}.bps>div{flex:1}.bpl{font-size:9px;color:var(--sub);margin-bottom:3px}
+/* Rhythm pills */
+.pills{display:flex;flex-wrap:wrap;gap:5px;padding:0 16px}
+.pill{padding:8px 14px;border-radius:99px;border:1px solid var(--bd);background:var(--sf2);color:var(--tx);font-size:12px;font-weight:600;cursor:pointer}
+.pill:active{filter:brightness(.8)}.pill.active{background:var(--gr);color:#000;border-color:var(--gr)}
+/* Interventions */
+.ivs{padding:0 16px;display:flex;flex-direction:column;gap:8px}
+.ig{background:var(--sf);border-radius:10px;border:1px solid var(--bd);overflow:hidden}
+.igt{font-size:9px;font-weight:700;letter-spacing:2px;color:var(--sub);padding:7px 11px 3px;background:var(--sf2)}
+.ir{display:flex;align-items:center;gap:7px;padding:7px 11px;border-top:1px solid var(--bd)}
+.in{flex:1;font-size:12px;font-weight:600;line-height:1.2}.rt{font-size:10px;color:var(--sub);font-weight:400}
+.di{width:64px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:13px;font-weight:700;text-align:center;padding:4px 3px;outline:none}
+.du{font-size:9px;color:var(--sub);min-width:28px}
+.bgv{background:var(--sf2);border:1px solid var(--bd);color:var(--tx);border-radius:7px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.bgv:active{filter:brightness(.8)}.bgv.ok{background:#003a00;color:var(--gr)}
+.er{display:flex;gap:7px;padding:7px 11px;border-top:1px solid var(--bd);align-items:center}
+.be{flex:1;padding:9px 5px;border-radius:7px;border:1px solid;font-size:11px;font-weight:700;cursor:pointer;text-align:center}
+.be:active{filter:brightness(.8)}
+.bdf{background:#3a0000;color:#ff6666;border-color:#660000}.bcv{background:#2a1a00;color:var(--yl);border-color:#553300}.bpc{background:#001a2a;color:var(--bl);border-color:#003355}
+
+/* ── VENT SETTINGS ── */
+.vspanel{padding:0 16px;display:flex;flex-direction:column;gap:8px}
+.vsrow{background:var(--sf);border-radius:10px;padding:9px 11px;border:1px solid var(--bd);display:flex;align-items:center;gap:8px}
+.vslbl{font-size:11px;font-weight:700;letter-spacing:1px;flex:1}
+.vsval{font-size:20px;font-weight:800;min-width:72px;text-align:center;font-variant-numeric:tabular-nums}
+.vsbtns{display:flex;gap:6px}
+.vsb{background:var(--sf2);border:1px solid var(--bd);color:var(--tx);border-radius:6px;width:32px;height:32px;font-size:18px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.vsb:active{filter:brightness(.8)}
+.modepills{display:flex;gap:6px;padding:0 16px}
+.mpill{flex:1;padding:9px 4px;border-radius:8px;border:1px solid var(--bd);background:var(--sf2);color:var(--sub);font-size:12px;font-weight:700;cursor:pointer;text-align:center}
+.mpill:active{filter:brightness(.8)}.mpill.on{background:#001a00;color:var(--gr);border-color:#1e4a1e}
+
+/* ── SIM RUNNER ── */
+#sim-runner{padding:0 16px;display:flex;flex-direction:column;gap:10px}
+#drop-zone{border:2px dashed #2a2a3a;border-radius:12px;padding:20px 16px;text-align:center;cursor:pointer;background:var(--sf);transition:border-color .2s,background .2s}
+#drop-zone:hover,#drop-zone.over{border-color:var(--or);background:#1a0e00}
+#dz-icon{font-size:28px;margin-bottom:6px}
+#dz-txt{font-size:12px;color:#555;line-height:1.7}
+#parse-status{font-size:11px;color:var(--yl);min-height:16px;text-align:center;padding:0 4px}
+#sim-list{display:flex;flex-direction:column;gap:6px}
+.sim-item{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px;cursor:pointer}
+.sim-item:active{filter:brightness(.8)}
+.sim-item.active{border-color:#3a5a00;background:#0e1e00}
+.sim-item-name{flex:1;font-size:12px;font-weight:700;line-height:1.3}
+.sim-item-sub{font-size:10px;color:var(--sub);margin-top:1px}
+.sim-item-del{background:none;border:none;color:#333;font-size:16px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1}
+.sim-item-del:hover{color:var(--rd);background:#2a0000}
+#sim-stage-card{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.sim-controls{display:flex;gap:8px}
+.simb{flex:1;border:1px solid var(--bd);border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;background:#0a0a0a;color:#888}
+.simb:active{filter:brightness(.8)}
+#sim-next{background:#001800;color:#00e676;border-color:#1e4a1e;font-size:15px}
+#sim-prev{background:#0a0a0a;color:#555}
+#sim-auto{background:#0a0000;color:#883333;border-color:#2a1010}
+#sim-prev{background:var(--sf2);color:var(--sub);border:1px solid var(--bd)}
+#sim-next{background:#1a2a00;color:var(--gr);border:1px solid #2a5a00}
+#sim-auto{background:var(--sf2);color:var(--yl);border:1px solid var(--bd);font-size:11px;padding:10px 8px;flex:0 0 80px}
+#sim-auto.on{background:#2a2200;border-color:var(--yl)}
+.sim-timer{font-size:11px;color:#555;text-align:center;padding:2px 0}
+
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:9px 18px;border-radius:99px;font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;border:1px solid #444;z-index:999;white-space:nowrap}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div style="font-size:44px">📱</div>
+  <h1>MedSim Controller</h1>
+  <p>Enter the <strong style="color:#fff">Room Code</strong> shown on the monitor.</p>
+  <input id="setup-input" type="text" value="ROOM1" maxlength="12" autocomplete="off" autocorrect="off" spellcheck="false">
+  <button id="setup-btn" onclick="doConnect()">CONNECT TO MONITOR</button>
+  <div id="setup-msg">Make sure the monitor is running first.</div>
+</div>
+
+<header>
+  <h1>🏥 MedSim Controller</h1>
+  <div id="status" class="off">● OFFLINE</div>
+</header>
+
+<!-- Live vitals strip -->
+<div id="vs">
+  <div class="vsi"><div class="vsl">HR</div><div class="vsv" style="color:var(--gr)" id="s-hr">--</div></div>
+  <div class="vsi"><div class="vsl">BP</div><div class="vsv" style="color:var(--rd)" id="s-bp">--/--</div></div>
+  <div class="vsi"><div class="vsl">SpO2</div><div class="vsv" style="color:var(--bl)" id="s-spo2">--%</div></div>
+  <div class="vsi"><div class="vsl">EtCO2</div><div class="vsv" style="color:var(--yl)" id="s-co2">--</div></div>
+  <div class="vsi"><div class="vsl">PIP</div><div class="vsv" style="color:#44ffaa" id="s-pip">--</div></div>
+  <div class="vsi"><div class="vsl">TV act</div><div class="vsv" style="color:#00cfff" id="s-tv-act">-- mL</div></div>
+</div>
+
+<!-- Monitor toggles -->
+<div class="stitle">🖥 Monitor Display</div>
+<div class="toggrid">
+  <button class="togbtn" id="tog-artLine" onclick="toggle('artLine')">📈 Art Line: OFF</button>
+  <button class="togbtn on" id="tog-etco2On" onclick="toggle('etco2On')">💨 EtCO2: ON</button>
+</div>
+<div style="padding:4px 16px 10px">
+  <button class="bgv" id="nibp-btn" onclick="recheckBP()" style="width:100%;padding:8px;font-size:13px;letter-spacing:1px">🩺 RECHECK BP</button>
+</div>
+
+<!-- ═══ HAPTICLUNG ═══ -->
+<div class="stitle" style="margin-top:2px">🫁 HapticLung Mk.5</div>
+<div style="padding:0 16px 10px">
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+    <input id="hl-ip" type="text" value="172.20.10.6" style="flex:1;background:#111;border:1px solid #333;color:#ccc;border-radius:6px;padding:5px 8px;font-size:12px;font-family:monospace" placeholder="192.168.x.x">
+    <div id="hl-dot" style="width:9px;height:9px;border-radius:50%;background:#333;flex-shrink:0;transition:background .4s;margin-left:2px"></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:9px 12px">
+    <div style="flex:1;font-size:11px;color:var(--sub)" id="hl-status">Off — enter IP then enable</div>
+    <button onclick="toggleHaptic()" id="hl-btn" style="background:#1a1a00;border:1px solid #333;color:#666;border-radius:7px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer">ENABLE</button>
+  </div>
+  <div style="font-size:9px;color:#333;margin-top:5px;line-height:1.6">Enter device IP — find it in your router or hotspot connected devices list.</div>
+</div>
+
+<!-- ═══ SIM RUNNER ═══ -->
+<div class="stitle">
+  🎬 Sim Runner
+  <span class="collapse" onclick="toggleSection('sec-sim-runner')">▲ collapse</span>
+</div>
+<div class="section-body" id="sec-sim-runner" style="max-height:800px">
+  <div id="sim-runner">
+
+    <!-- JSON paste — only input method -->
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:4px">
+      <div style="font-size:10px;color:#555;letter-spacing:.5px">📋 Paste JSON from claude.ai (see medsim-parse-prompt.txt)</div>
+      <textarea id="json-ta" placeholder='[ {"name":"BASELINE", "vitals":{...}, "vent":{...}}, ... ]' style="width:100%;height:72px;background:#0a0a0a;border:1px solid #2a2a00;border-radius:8px;color:#ffd740;font-size:11px;padding:8px;resize:vertical;font-family:'Courier New',monospace;line-height:1.4;outline:none"></textarea>
+      <button onclick="loadJSONPaste()" style="background:#1a1600;color:#ffd740;border:1px solid #3a3000;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.5px">⚡ LOAD JSON</button>
+    </div>
+    <div id="parse-status" style="font-size:11px;color:#ffd740;min-height:16px;text-align:center;padding:0 4px"></div>
+
+    <!-- Loaded sims list -->
+    <div id="sim-list-wrap" style="display:none">
+      <div style="font-size:9px;font-weight:700;letter-spacing:2px;color:var(--sub);padding:4px 0 6px;text-transform:uppercase">Loaded Simulations</div>
+      <div id="sim-list"></div>
+    </div>
+
+    <!-- Active stage card — NEXT at TOP so it's always visible on mobile -->
+    <div id="sim-stage-card" style="display:none;flex-direction:column;gap:6px">
+
+      <!-- NEXT button at top — always first visible -->
+      <button id="next-btn" onclick="simStep(1)"
+        style="width:100%;background:#001800;color:#00e676;border:2px solid #1e4a1e;border-radius:10px;padding:16px;font-size:18px;font-weight:800;cursor:pointer;letter-spacing:1px;touch-action:manipulation">
+        NEXT STAGE ▶
+      </button>
+
+      <!-- Stage header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-top:4px">
+        <div>
+          <div id="sim-active-name" style="font-size:9px;color:var(--sub);letter-spacing:1px;text-transform:uppercase"></div>
+          <div id="sim-stage-name" style="font-size:13px;font-weight:800;color:var(--or);letter-spacing:.5px"></div>
+        </div>
+        <div id="sim-stage-num" style="font-size:10px;color:var(--sub);white-space:nowrap;margin-top:3px"></div>
+      </div>
+
+      <div id="sim-stage-desc" style="font-size:12px;color:#ccc;line-height:1.6"></div>
+      <div id="sim-stage-changes" style="font-size:10px;color:var(--sub);border-top:1px solid var(--bd);padding-top:6px;line-height:1.8"></div>
+
+      <!-- Expected actions — tap to mark done → auto-advance -->
+      <div id="sim-stage-actions"
+           style="font-size:11px;color:#3a7a3a;line-height:1.8;font-style:italic;padding:8px;background:#060f06;border-radius:6px;cursor:pointer;display:none;border:1px solid #1a3a1a"
+           onclick="markActionDone()">
+        <div style="font-size:9px;letter-spacing:1px;color:#2a5a2a;font-style:normal;margin-bottom:4px">✔ TAP WHEN INTERVENTION DONE:</div>
+        <div id="sim-action-text"></div>
+        <div id="sim-action-check" style="color:#00e676;margin-top:4px;display:none;font-style:normal;font-weight:700">✓ ADVANCING TO NEXT STAGE…</div>
+      </div>
+
+      <!-- PREV / AUTO controls -->
+      <div class="sim-controls" id="sim-nav" style="display:none">
+        <button class="simb" id="sim-prev" onclick="simStep(-1)">◀ PREV</button>
+        <button class="simb" id="sim-auto" onclick="toggleAuto()">⏱ AUTO</button>
+      </div>
+      <div class="sim-timer" id="sim-timer"></div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ VENT PATHOLOGY ═══ -->
+<div class="stitle">
+  🫁 Vent Pathology
+  <span class="collapse" onclick="toggleSection('sec-vpath')">▲ collapse</span>
+</div>
+<div class="section-body" id="sec-vpath" style="max-height:400px">
+  <div class="sgrid">
+    <button class="btn bvn" onclick="vp('normal')">✓ Normal Lungs<span class="sub">C:50 R:5</span></button>
+    <button class="btn bvp" onclick="vp('bronchospasm')">Bronchospasm<span class="sub">↑PIP · Shark fin CO₂</span></button>
+    <button class="btn bvr" onclick="vp('ards')">ARDS<span class="sub">↓Compliance · ↑PIP</span></button>
+    <button class="btn bvp" onclick="vp('mainstem')">Mainstem Intub.<span class="sub">One-lung · ↑PIP</span></button>
+    <button class="btn bvp" onclick="vp('mucus_plug')">Mucus Plug<span class="sub">↑Resistance</span></button>
+    <button class="btn bvp" onclick="vp('air_embolism')">Air Embolism<span class="sub">↓EtCO₂ abrupt</span></button>
+    <button class="btn bvr" onclick="vp('pneumothorax')">Pneumothorax<span class="sub">↑PIP · ↓SpO₂ · ↑HR</span></button>
+    <button class="btn bvr" onclick="vp('laryngospasm')">Laryngospasm<span class="sub">Obstruction · ↓SpO₂</span></button>
+    <button class="btn bvr" onclick="vp('apnea')">Apnea<span class="sub">No breaths · alarm</span></button>
+    <button class="btn bvr" onclick="vp('disconnect')">Circuit Disconnect<span class="sub">Flat waveforms</span></button>
+    <button class="btn bvp" onclick="vp('pulm_edema')">Pulm. Edema<span class="sub">↓Compliance · ↓SpO₂</span></button>
+    <button class="btn bvp" onclick="vp('co2_absorber')">CO₂ Absorber ↑<span class="sub">↑EtCO₂ rebreathing</span></button>
+  </div>
+</div>
+
+<!-- ═══ VENT SETTINGS ═══ -->
+<div class="stitle">
+  ⚙️ Vent Settings
+  <span class="collapse" onclick="toggleSection('sec-vent')">▲ collapse</span>
+</div>
+<div class="section-body" id="sec-vent" style="max-height:600px">
+  <!-- Patient Breath button -->
+  <button onclick="triggerSpontBreath()" style="width:100%;margin-bottom:8px;background:#001a1a;border:2px solid #004444;color:#00ffcc;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:1px;font-family:'Courier New',monospace">
+    💨 PATIENT BREATH
+  </button>
+  <!-- TV set vs actual inline display -->
+  <div style="display:flex;align-items:center;justify-content:space-between;background:#0a0a14;border:1px solid #1e1e2e;border-radius:8px;padding:7px 12px;margin-bottom:8px">
+    <span style="font-size:10px;letter-spacing:1px;color:#444">TV</span>
+    <span style="font-size:11px;color:#555">SET <span style="color:#00cfff;font-weight:700" id="ctrl-tv-set">450</span> mL</span>
+    <span style="font-size:11px;color:#555">ACT <span style="color:#00cfff;font-weight:700" id="ctrl-tv-act">--</span> mL</span>
+  </div>
+  <div class="modepills" style="margin-bottom:8px">
+    <button class="mpill on" id="mp-VCV"    onclick="setVentMode('VCV')">VCV</button>
+    <button class="mpill"    id="mp-PCV"    onclick="setVentMode('PCV')">PCV</button>
+    <button class="mpill"    id="mp-PSV"    onclick="setVentMode('PSV')">PSV</button>
+    <button class="mpill"    id="mp-SIMV"   onclick="setVentMode('SIMV')">SIMV</button>
+    <button class="mpill"    id="mp-Manual" onclick="setVentMode('Manual')">MANUAL</button>
+  </div>
+  <div class="vspanel">
+    <div class="vsrow">
+      <span class="vslbl" style="color:var(--bl)">Tidal Volume</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('tv',-50)">−</button></div>
+      <span class="vsval" style="color:var(--bl)" id="vc-tv">450 mL</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('tv',50)">+</button></div>
+    </div>
+    <div class="vsrow">
+      <span class="vslbl" style="color:#8899ff">Rate (set)</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('rr_set',-1)">−</button></div>
+      <span class="vsval" style="color:#8899ff" id="vc-rr">14 /min</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('rr_set',1)">+</button></div>
+    </div>
+    <div class="vsrow">
+      <span class="vslbl" style="color:#44ffaa">PEEP</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('peep',-1)">−</button></div>
+      <span class="vsval" style="color:#44ffaa" id="vc-peep">5 cmH₂O</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('peep',1)">+</button></div>
+    </div>
+    <div class="vsrow">
+      <span class="vslbl" style="color:var(--or)">FiO₂</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('fio2',-5)">−</button></div>
+      <span class="vsval" style="color:var(--or)" id="vc-fio2">50%</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('fio2',5)">+</button></div>
+    </div>
+    <div class="vsrow" id="vc-row-ps">
+      <span class="vslbl" style="color:#aaffaa">Press. Support</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('ps',-2)">−</button></div>
+      <span class="vsval" style="color:#aaffaa" id="vc-ps">10 cmH₂O</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('ps',2)">+</button></div>
+    </div>
+    <div class="vsrow">
+      <span class="vslbl" style="color:#8899ff">I:E Ratio</span>
+      <div class="vsbtns"><button class="vsb" onclick="vaIE(-1)">−</button></div>
+      <span class="vsval" style="color:#8899ff" id="vc-ie">1:2.0</span>
+      <div class="vsbtns"><button class="vsb" onclick="vaIE(1)">+</button></div>
+    </div>
+    <div class="vsrow" id="vc-row-apl">
+      <span class="vslbl" style="color:var(--or)">APL Valve</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('apl',-5)">−</button></div>
+      <span class="vsval" style="color:var(--or)" id="vc-apl">30 cmH₂O</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('apl',5)">+</button></div>
+    </div>
+    <div class="vsrow">
+      <span class="vslbl" style="color:var(--rd)">P.Limit Alarm</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('pipLimit',-2)">−</button></div>
+      <span class="vsval" style="color:var(--rd)" id="vc-plim">40 cmH₂O</span>
+      <div class="vsbtns"><button class="vsb" onclick="va('pipLimit',2)">+</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCENARIOS ═══ -->
+<div class="stitle">
+  ⚡ Scenarios
+  <span class="collapse" onclick="toggleSection('sec-sc')">▲ collapse</span>
+</div>
+<div class="section-body" id="sec-sc" style="max-height:600px">
+  <div class="sgrid">
+    <button class="btn bn"  onclick="sc('normal')">✓ Normal Sinus<span class="sub">HR 72 | BP 120/80</span></button>
+    <button class="btn ba"  onclick="sc('cardiac_arrest_vfib')">V-Fib Arrest<span class="sub">Shockable</span></button>
+    <button class="btn ba"  onclick="sc('asystole')">Asystole<span class="sub">Flatline</span></button>
+    <button class="btn ba"  onclick="sc('cardiac_arrest_pea')">PEA Arrest<span class="sub">Non-shockable</span></button>
+    <button class="btn bt"  onclick="sc('vtach_unstable')">V-Tach (Unstable)<span class="sub">HR 155 | BP 72/42</span></button>
+    <button class="btn ba"  onclick="sc('vtach_pulseless')">V-Tach (Pulseless)<span class="sub">No pulse</span></button>
+    <button class="btn bt"  onclick="sc('svt')">SVT<span class="sub">HR 220</span></button>
+    <button class="btn bt"  onclick="sc('afib')">A-Fib<span class="sub">HR 112 | Irregular</span></button>
+    <button class="btn bt"  onclick="sc('afib_rvr')">A-Fib RVR<span class="sub">HR 148</span></button>
+    <button class="btn bb2" onclick="sc('bradycardia')">Bradycardia<span class="sub">HR 36 | BP 78/48</span></button>
+    <button class="btn bsh" onclick="sc('hypovolemic_shock')">Hypovolemic Shock<span class="sub">HR 128 | BP 78/48</span></button>
+    <button class="btn bsh" onclick="sc('septic_shock')">Septic Shock<span class="sub">HR 118 | Temp 39°C</span></button>
+    <button class="btn bsh" onclick="sc('anaphylaxis')">Anaphylaxis<span class="sub">BP 68/38</span></button>
+    <button class="btn br2" onclick="sc('pulm_embolism')">Pulm. Embolism<span class="sub">SpO2 85</span></button>
+    <button class="btn br2" onclick="sc('tension_ptx')">Tension PTX<span class="sub">SpO2 82</span></button>
+    <button class="btn bh"  onclick="sc('hypertensive_crisis')">HTN Crisis<span class="sub">BP 225/138</span></button>
+    <button class="btn bro" onclick="sc('rosc')">ROSC<span class="sub">Post-arrest</span></button>
+  </div>
+</div>
+
+<!-- ═══ VITALS ═══ -->
+<div class="stitle">
+  🎛 Vitals
+  <span class="collapse" onclick="toggleSection('sec-vit')">▲ collapse</span>
+</div>
+<div class="section-body" id="sec-vit" style="max-height:600px">
+  <div class="vpanel">
+    <div class="vrow">
+      <div class="vrh"><span class="vrl" style="color:var(--gr)">HEART RATE</span><span class="vrv" style="color:var(--gr)" id="lhr">72</span></div>
+      <input type="range" id="sl-hr" class="rg" min="0" max="300" value="72" oninput="ulbl('lhr',this.value);svu('hr',this.value)">
+    </div>
+    <div class="vrow">
+      <div class="vrh"><span class="vrl" style="color:var(--rd)">BLOOD PRESSURE</span><span class="vrv" style="color:var(--rd)" id="lbp">120/80</span></div>
+      <div class="bps">
+        <div><div class="bpl">SYSTOLIC</div><input type="range" id="sl-sbp" class="rrd" min="0" max="280" value="120" oninput="ubp();sbpChange()"></div>
+        <div><div class="bpl">DIASTOLIC</div><input type="range" id="sl-dbp" class="rrd" min="0" max="180" value="80" oninput="ubp();sbpChange()"></div>
+      </div>
+      <div style="margin-top:6px">
+        <div class="bpl" style="color:rgba(255,80,80,0.6);letter-spacing:1.5px">▲▼ BP LEVEL <span id="lbplevel" style="color:var(--rd)">120</span></div>
+        <input type="range" id="sl-bplevel" class="rrd" min="0" max="250" value="120"
+          oninput="bpLevelChange(this.value)">
+      </div>
+    </div>
+    <div class="vrow">
+      <div class="vrh"><span class="vrl" style="color:var(--bl)">SpO2</span><span class="vrv" style="color:var(--bl)" id="lsp">98%</span></div>
+      <input type="range" id="sl-spo2" class="rbl" min="50" max="100" value="98" oninput="ulbl('lsp',this.value,'%');svu('spo2',this.value)">
+    </div>
+    <div class="vrow">
+      <div class="vrh"><span class="vrl" style="color:#aaffaa">RESP RATE</span><span class="vrv" style="color:#aaffaa" id="lrr">14</span></div>
+      <input type="range" id="sl-rr" class="rg" min="0" max="60" value="14" oninput="ulbl('lrr',this.value);svu('rr',this.value)">
+    </div>
+    <!-- Hidden patient RR — instructor only, drives Manual/spontaneous breathing, not shown on monitor -->
+    <div class="vrow" style="background:#0a0500;border-radius:6px;padding:4px 6px;margin-top:2px">
+      <div class="vrh"><span class="vrl" style="color:#ff9100;font-size:9px">🔒 PATIENT SPONT RR <span style="color:#553300">(hidden from learners)</span></span><span class="vrv" style="color:#ff9100;font-size:11px" id="lsrr">0</span></div>
+      <input type="range" id="sl-srr" class="ror" min="0" max="40" value="0" oninput="ulbl('lsrr',this.value);setSpontRR(this.value)">
+    </div>
+    <div class="vrow">
+      <div class="vrh"><span class="vrl" style="color:var(--yl)">EtCO2</span><span class="vrv" style="color:var(--yl)" id="lco2">35</span></div>
+      <input type="range" id="sl-etco2" class="ryl" min="0" max="80" value="35" oninput="ulbl('lco2',this.value);svu('etco2',this.value)">
+    </div>
+    <div class="vrow">
+      <div class="vrh"><span class="vrl" style="color:var(--or)">TEMP</span><span class="vrv" style="color:var(--or)" id="ltmp">37.0°C</span></div>
+      <input type="range" id="sl-temp" class="ror" min="90" max="108" step="0.2" value="98.6" oninput="utmp(this.value);svu('temp',this.value)">
+    </div>
+  </div>
+</div>
+
+<!-- ═══ RHYTHM ═══ -->
+<div class="stitle">♫ Rhythm</div>
+<div class="pills">
+  <div class="pill active" id="pill-NSR"      onclick="svrh('NSR')">NSR</div>
+  <div class="pill" id="pill-AFib"     onclick="svrh('AFib')">A-Fib</div>
+  <div class="pill" id="pill-SVT"      onclick="svrh('SVT')">SVT</div>
+  <div class="pill" id="pill-VTach"    onclick="svrh('VTach')">V-Tach</div>
+  <div class="pill" id="pill-VFib"     onclick="svrh('VFib')">V-Fib</div>
+  <div class="pill" id="pill-Brady"    onclick="svrh('Brady')">Brady</div>
+  <div class="pill" id="pill-PEA"      onclick="svrh('PEA')">PEA</div>
+  <div class="pill" id="pill-Asystole" onclick="svrh('Asystole')">Asystole</div>
+  <div class="pill" id="pill-Paced"    onclick="svrh('Paced')">Paced</div>
+</div>
+
+<!-- ═══ INTERVENTIONS ═══ -->
+<div class="stitle">
+  💊 Interventions
+  <span class="collapse" onclick="toggleSection('sec-iv')">▲ collapse</span>
+</div>
+<div class="section-body" id="sec-iv" style="max-height:2000px">
+  <div class="ivs">
+    <div class="ig"><div class="igt">VASOPRESSORS / INOTROPES</div>
+      <div class="ir"><div class="in">Epinephrine<span class="rt"> IV push</span></div><input class="di" id="d-epi_push" type="number" value="10"><span class="du">mcg</span><button class="bgv" onclick="iv('epi_push')">GIVE</button></div>
+      <div class="ir"><div class="in">Epinephrine<span class="rt"> infusion</span></div><input class="di" id="d-epi_infusion" type="number" value="0.1" step="0.05"><span class="du">mcg/kg/min</span><button class="bgv" onclick="iv('epi_infusion')">SET</button></div>
+      <div class="ir"><div class="in">Norepinephrine<span class="rt"> infusion</span></div><input class="di" id="d-norepi" type="number" value="0.1" step="0.05"><span class="du">mcg/kg/min</span><button class="bgv" onclick="iv('norepi')">SET</button></div>
+      <div class="ir"><div class="in">Phenylephrine<span class="rt"> IV push</span></div><input class="di" id="d-phenylephrine_push" type="number" value="100"><span class="du">mcg</span><button class="bgv" onclick="iv('phenylephrine_push')">PUSH</button></div>
+      <div class="ir"><div class="in">Phenylephrine<span class="rt"> infusion</span></div><input class="di" id="d-phenylephrine" type="number" value="0.5" step="0.1"><span class="du">mcg/kg/min</span><button class="bgv" onclick="iv('phenylephrine')">SET</button></div>
+      <div class="ir"><div class="in">Vasopressin<span class="rt"> infusion</span></div><input class="di" id="d-vasopressin" type="number" value="0.03" step="0.01"><span class="du">u/min</span><button class="bgv" onclick="iv('vasopressin')">SET</button></div>
+      <div class="ir"><div class="in">Dopamine</div><input class="di" id="d-dopamine" type="number" value="5"><span class="du">mcg/kg/min</span><button class="bgv" onclick="iv('dopamine')">SET</button></div>
+      <div class="ir"><div class="in">Epi — anaphylaxis<span class="rt"> IM</span></div><input class="di" id="d-epi_anaphylaxis" type="number" value="0.3" step="0.1"><span class="du">mg</span><button class="bgv" onclick="iv('epi_anaphylaxis')">GIVE</button></div>
+    </div>
+    <div class="ig"><div class="igt">ANTIARRHYTHMICS</div>
+      <div class="ir"><div class="in">Adenosine<span class="rt"> rapid IV</span></div><input class="di" id="d-adenosine" type="number" value="6" step="6" min="6" max="12"><span class="du">mg</span><button class="bgv" onclick="iv('adenosine')">PUSH</button></div>
+      <div class="ir"><div class="in">Amiodarone</div><input class="di" id="d-amiodarone" type="number" value="150" step="50"><span class="du">mg</span><button class="bgv" onclick="iv('amiodarone')">GIVE</button></div>
+      <div class="ir"><div class="in">Lidocaine</div><input class="di" id="d-lidocaine" type="number" value="1.5" step="0.5"><span class="du">mg/kg</span><button class="bgv" onclick="iv('lidocaine')">GIVE</button></div>
+      <div class="ir"><div class="in">Atropine</div><input class="di" id="d-atropine" type="number" value="0.5" step="0.5"><span class="du">mg</span><button class="bgv" onclick="iv('atropine')">GIVE</button></div>
+      <div class="ir"><div class="in">Metoprolol</div><input class="di" id="d-metoprolol" type="number" value="5" step="5"><span class="du">mg</span><button class="bgv" onclick="iv('metoprolol')">GIVE</button></div>
+    </div>
+    <div class="ig"><div class="igt">SEDATION / AIRWAY / ANALGESIC</div>
+      <div class="ir"><div class="in">Ketamine</div><input class="di" id="d-ketamine" type="number" value="1.5" step="0.5"><span class="du">mg/kg</span><button class="bgv" onclick="iv('ketamine')">GIVE</button></div>
+      <div class="ir"><div class="in">Propofol</div><input class="di" id="d-propofol" type="number" value="200" step="50"><span class="du">mg</span><button class="bgv" onclick="iv('propofol')">GIVE</button></div>
+      <div class="ir"><div class="in">Fentanyl</div><input class="di" id="d-fentanyl" type="number" value="100" step="25"><span class="du">mcg</span><button class="bgv" onclick="iv('fentanyl')">GIVE</button></div>
+      <div class="ir"><div class="in">Succinylcholine</div><input class="di" id="d-succinylcholine" type="number" value="1.5" step="0.5"><span class="du">mg/kg</span><button class="bgv" onclick="iv('succinylcholine')">GIVE</button></div>
+      <div class="ir"><div class="in">Vecuronium</div><input class="di" id="d-vecuronium" type="number" value="0.1" step="0.05"><span class="du">mg/kg</span><button class="bgv" onclick="iv('vecuronium')">GIVE</button></div>
+      <div class="ir"><div class="in">Intubation confirmed<span class="rt"> enables EtCO2</span></div><button class="bgv" onclick="iv('intubation',1)">CONFIRM</button></div>
+      <div class="ir"><div class="in">Naloxone (Narcan)</div><input class="di" id="d-narcan" type="number" value="0.4" step="0.4"><span class="du">mg</span><button class="bgv" onclick="iv('narcan')">GIVE</button></div>
+    </div>
+    <div class="ig"><div class="igt">FLUIDS / BLOOD</div>
+      <div class="ir"><div class="in">IV Fluid Bolus<span class="rt"> NS/LR</span></div><input class="di" id="d-fluid" type="number" value="500" step="250"><span class="du">mL</span><button class="bgv" onclick="iv('fluid')">RUN</button></div>
+      <div class="ir"><div class="in">pRBC Transfusion</div><input class="di" id="d-blood" type="number" value="1" min="1"><span class="du">units</span><button class="bgv" onclick="iv('blood')">GIVE</button></div>
+      <div class="ir"><div class="in">Oxygen<span class="rt"> supplemental</span></div><input class="di" id="d-o2" type="number" value="10" step="5" min="1" max="100"><span class="du">L/min</span><button class="bgv" onclick="iv('o2')">APPLY</button></div>
+    </div>
+    <div class="ig"><div class="igt">ANTIHYPERTENSIVES</div>
+      <div class="ir"><div class="in">Nitroglycerin</div><input class="di" id="d-nitroglycerin" type="number" value="50" step="25"><span class="du">mcg/min</span><button class="bgv" onclick="iv('nitroglycerin')">SET</button></div>
+      <div class="ir"><div class="in">Labetalol</div><input class="di" id="d-labetalol" type="number" value="20" step="20"><span class="du">mg</span><button class="bgv" onclick="iv('labetalol')">GIVE</button></div>
+      <div class="ir"><div class="in">Nicardipine</div><input class="di" id="d-nicardipine" type="number" value="5" step="1"><span class="du">mg/hr</span><button class="bgv" onclick="iv('nicardipine')">SET</button></div>
+    </div>
+    <div class="ig"><div class="igt">ELECTRICAL</div>
+      <div class="er">
+        <div style="flex:2"><div style="font-size:11px;font-weight:600;margin-bottom:3px">Energy (J)</div><input class="di" id="d-elec" type="number" value="200" step="50" style="width:72px"></div>
+        <button class="be bdf" onclick="iv2('defib','d-elec')">⚡ DEFIB</button>
+        <button class="be bcv" onclick="iv2('cardioversion','d-elec')">⚡ CARDIOVERT</button>
+      </div>
+      <div class="er">
+        <div style="flex:2"><div style="font-size:11px;font-weight:600;margin-bottom:3px">Rate (bpm)</div><input class="di" id="d-pace" type="number" value="70" step="10" style="width:72px"></div>
+        <button class="be bpc" onclick="iv2('pacing','d-pace')" style="flex:2">TRANSCUTANEOUS PACING</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+var ROOM='',peer=null,monConn=null;
+var statusEl=document.getElementById('status');
+var toggleState={artLine:false,etco2On:true};
+var VS={ventMode:'VCV',tv:450,rr_set:14,peep:5,ps:10,fio2:50,ie:2.0,pipLimit:40,apl:30,riseTime:25};
+
+document.getElementById('setup-input').addEventListener('keydown',function(e){if(e.key==='Enter')doConnect();});
+
+function doConnect(){
+  var v=document.getElementById('setup-input').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!v){alert('Enter a room code');return;}
+  ROOM=v;
+  document.getElementById('setup-btn').disabled=true;
+  document.getElementById('setup-msg').textContent='Connecting...';
+  document.getElementById('setup-msg').style.color='#ffd740';
+  peer=new Peer({debug:0});
+  peer.on('open',function(){
+    monConn=peer.connect('medsim-mon-'+ROOM,{reliable:true});
+    monConn.on('open',function(){
+      document.getElementById('setup').style.display='none';
+      statusEl.textContent='● LIVE';statusEl.className='live';
+      toast('Connected!');
+    });
+    monConn.on('data',function(msg){
+      if(msg&&msg.type==='state'&&msg.data)updateUI(msg.data);
+    });
+    monConn.on('close',function(){statusEl.textContent='● DISCONNECTED';statusEl.className='off';});
+    monConn.on('error',function(){
+      statusEl.textContent='● ERROR';statusEl.className='off';
+      document.getElementById('setup-msg').textContent='Could not reach monitor.';
+      document.getElementById('setup-msg').style.color='#ff4444';
+      document.getElementById('setup-btn').disabled=false;
+    });
+  });
+  peer.on('error',function(e){
+    document.getElementById('setup-msg').textContent='Error: '+e.message;
+    document.getElementById('setup-msg').style.color='#ff4444';
+    document.getElementById('setup-btn').disabled=false;
+  });
+}
+
+function send(obj){
+  if(monConn&&monConn.open){try{monConn.send(obj);}catch(e){toast('Send failed');}}
+  else{toast('Not connected');}
+}
+
+// ── COLLAPSE ─────────────────────────────────────────────────────────────────
+function toggleSection(id){
+  var el=document.getElementById(id)||document.getElementById('sec-'+id);
+  if(!el)return;
+  var open=el.style.maxHeight!=='0px'&&el.style.maxHeight!=='';
+  el.style.maxHeight=open?'0px':el.scrollHeight+200+'px';
+}
+
+// ── TOGGLES ──────────────────────────────────────────────────────────────────
+function toggle(key){
+  send({type:'toggle',key:key});
+  toggleState[key]=!toggleState[key];
+  updateToggleBtn(key);
+}
+function updateToggleBtn(key){
+  var el=document.getElementById('tog-'+key);if(!el)return;
+  if(key==='artLine'){
+    el.textContent='📈 Art Line: '+(toggleState.artLine?'ON':'OFF');
+    el.classList.toggle('on',toggleState.artLine);
+
+  }
+  else if(key==='etco2On'){el.textContent='💨 EtCO2: '+(toggleState.etco2On?'ON':'OFF');el.classList.toggle('on',toggleState.etco2On);}
+}
+function recheckBP(){
+  send({type:'intervention',drug:'nibp_recheck',dose:0});
+  var b=document.getElementById('nibp-btn');
+  if(b){var o=b.textContent;b.classList.add('ok');b.textContent='✓ Checking...';setTimeout(function(){b.classList.remove('ok');b.textContent=o;},1500);}
+  toast('NIBP recheck');
+}
+
+// ── VENT PATHOLOGY ────────────────────────────────────────────────────────────
+function vp(path){send({type:'ventPath',path:path});sendHaptic(path);toast('Vent: '+path.replace(/_/g,' '));}
+
+function triggerSpontBreath(){send({type:'spontBreath'});toast('Patient breath triggered');}
+
+// ── VENT SETTINGS ─────────────────────────────────────────────────────────────
+var vaLimits={tv:[50,1500],rr_set:[2,60],peep:[0,20],fio2:[21,100],ps:[0,40],pipLimit:[15,70],apl:[5,70],riseTime:[5,80]};
+var iaSteps=[1.0,1.5,2.0,2.5,3.0,4.0];
+function va(key,delta){
+  var lim=vaLimits[key]||[0,999];
+  VS[key]=Math.max(lim[0],Math.min(lim[1],(VS[key]||0)+delta));
+  send({type:'update',data:(function(){var d={};d[key]=VS[key];return d;})()});
+  refreshVentUI();
+}
+function vaIE(dir){
+  var idx=iaSteps.findIndex(function(v){return Math.abs(v-(VS.ie||2))<0.01;});
+  if(idx===-1)idx=2;
+  idx=Math.max(0,Math.min(iaSteps.length-1,idx+dir));
+  VS.ie=iaSteps[idx];
+  send({type:'update',data:{ie:VS.ie}});
+  refreshVentUI();
+}
+function setVentMode(m){
+  VS.ventMode=m;
+  send({type:'update',data:{ventMode:m}});
+  refreshVentUI();
+}
+function refreshVentUI(){
+  document.getElementById('vc-tv').textContent=(VS.tv||450)+' mL';
+  document.getElementById('vc-rr').textContent=(VS.rr_set||14)+' /min';
+  document.getElementById('vc-peep').textContent=(VS.peep||5)+' cmH₂O';
+  document.getElementById('vc-fio2').textContent=(VS.fio2||50)+'%';
+  document.getElementById('vc-ps').textContent=(VS.ps||10)+' cmH₂O';
+  document.getElementById('vc-ie').textContent='1:'+(VS.ie||2.0).toFixed(1);
+  document.getElementById('vc-apl').textContent=(VS.apl||30)+' cmH₂O';
+  document.getElementById('vc-plim').textContent=(VS.pipLimit||40)+' cmH₂O';
+  var m=VS.ventMode||'VCV';
+  ['VCV','PCV','PSV','SIMV','Manual'].forEach(function(x){document.getElementById('mp-'+x).classList.toggle('on',x===m);});
+  document.getElementById('vc-row-ps').style.opacity=(m==='PSV'||m==='SIMV')?'1':'0.3';
+  document.getElementById('vc-row-apl').style.opacity=(m==='Manual')?'1':'0.3';
+}
+
+// ── SCENARIOS ────────────────────────────────────────────────────────────────
+function sc(name){send({type:'scenario',name:name});toast(name.replace(/_/g,' '));}
+
+// ── VITALS ───────────────────────────────────────────────────────────────────
+function svu(key,val){var d={};d[key]=Number(val);send({type:'update',data:d});}
+function svrh(rh){
+  send({type:'update',data:{rhythm:rh}});
+  document.querySelectorAll('.pill').forEach(function(p){p.classList.toggle('active',p.textContent===rh);});
+}
+function sbpChange(){send({type:'update',data:{sbp:Number(document.getElementById('sl-sbp').value),dbp:Number(document.getElementById('sl-dbp').value)}});}
+
+// ── INTERVENTIONS ─────────────────────────────────────────────────────────────
+function iv(drug,fixedDose){
+  var dose=fixedDose!==undefined?fixedDose:Number(document.getElementById('d-'+drug).value);
+  send({type:'intervention',drug:drug,dose:dose});
+  var b=event.currentTarget;
+  if(b&&b.classList.contains('bgv')){var o=b.textContent;b.classList.add('ok');b.textContent='✓';setTimeout(function(){b.classList.remove('ok');b.textContent=o;},700);}
+  toast(drug.replace(/_/g,' ')+' '+dose);
+}
+function iv2(drug,inputId){var dose=Number(document.getElementById(inputId).value);send({type:'intervention',drug:drug,dose:dose});toast(drug+' '+dose);}
+
+// ── UPDATE UI FROM MONITOR ────────────────────────────────────────────────────
+function updateUI(s){
+  lastState=s;
+  var noCircHR=(s.rhythm==='VFib'||s.rhythm==='Asystole');
+  var noCirc=noCircHR||(s.rhythm==='PEA');
+  var noPerf=noCirc||(s.sbp<30);
+  document.getElementById('s-hr').textContent=noCircHR?'---':s.hr;
+  document.getElementById('s-bp').textContent=(noCirc||s.sbp===0)?'---/---':s.sbp+'/'+s.dbp;
+  document.getElementById('s-spo2').textContent=noPerf?'---%':s.spo2+'%';
+  document.getElementById('s-co2').textContent=(!s.etco2On||noCirc)?'---':s.etco2;
+  // PIP calc
+  var comp=(s.compliance||50)/1000,res=s.resistance||5,tv_L=(s.tv||450)/1000,flow=(s.flowRate||40)/60;
+  var pip=Math.round(tv_L/comp+(s.peep||5)+res*flow);
+  document.getElementById('s-pip').textContent=(s.ventPath==='disconnect')?'--':pip;
+  // TV actual — relayed from vent via monitor
+  var atv=s.actualTV||(s.tv||450);
+  var atvDisplay=(s.ventPath==='disconnect')?'--':atv;
+  document.getElementById('s-tv-act').textContent=(s.ventPath==='disconnect')?'-- mL':atv+' mL';
+  if(document.getElementById('ctrl-tv-set'))document.getElementById('ctrl-tv-set').textContent=s.tv||450;
+  if(document.getElementById('ctrl-tv-act')){
+    document.getElementById('ctrl-tv-act').textContent=atvDisplay;
+    document.getElementById('ctrl-tv-act').style.color=(typeof atv==='number'&&typeof (s.tv||450)==='number'&&Math.abs(atv-(s.tv||450))>20)?'#ffaa00':'#00cfff';
+  }
+  // Sync sliders
+  document.getElementById('sl-hr').value=s.hr;document.getElementById('lhr').textContent=s.hr;
+  document.getElementById('sl-sbp').value=s.sbp;document.getElementById('sl-dbp').value=s.dbp;
+  document.getElementById('sl-bplevel').value=120;
+  _prevLevelVal=120;
+  document.getElementById('lbplevel').textContent=s.sbp+'/'+s.dbp;
+  document.getElementById('lbp').textContent=s.sbp+'/'+s.dbp;
+  document.getElementById('sl-spo2').value=s.spo2;document.getElementById('lsp').textContent=s.spo2+'%';
+  document.getElementById('sl-rr').value=s.rr;document.getElementById('lrr').textContent=s.rr;
+  document.getElementById('sl-etco2').value=s.etco2;document.getElementById('lco2').textContent=s.etco2;
+  document.getElementById('sl-temp').value=s.temp;document.getElementById('ltmp').textContent=((+s.temp-32)*5/9).toFixed(1)+'°C';
+  document.querySelectorAll('.pill').forEach(function(p){p.classList.toggle('active',p.textContent===s.rhythm);});
+  toggleState.artLine=!!s.artLine;toggleState.etco2On=!!s.etco2On;
+  updateToggleBtn('artLine');updateToggleBtn('etco2On');
+  // Sync vent cache
+  ['ventMode','tv','rr_set','peep','ps','fio2','ie','pipLimit','apl','riseTime'].forEach(function(k){if(s[k]!==undefined)VS[k]=s[k];});
+  refreshVentUI();
+}
+
+// ── SIM RUNNER ───────────────────────────────────────────────────────────────
+var loadedSims = [];
+var activeSim = null;
+var simIdx = 0;
+var autoTick = null, autoCountdown = 0, autoInterval = 30;
+
+function loadJSONPaste() {
+  var raw = document.getElementById('json-ta').value.trim();
+  if (!raw) { setStatus('⚠️ Paste JSON first.'); return; }
+  raw = raw.replace(/^```json|^```|```$/gm,'').trim();
+  try {
+    var stages = JSON.parse(raw);
+    if (!Array.isArray(stages) || stages.length === 0) throw new Error('Must be a non-empty JSON array');
+    stages.forEach(function(s,i){ if(!s.name) s.name='Stage '+(i+1); });
+    var simName = (stages[0].name||'Sim').split(/\s+/)[0]+' Sim';
+    loadedSims.push({name:simName, stages:stages});
+    document.getElementById('json-ta').value = '';
+    setStatus('✓ Loaded "'+simName+'" — '+stages.length+' stages');
+    renderSimList();
+    activateSim(loadedSims.length - 1);
+  } catch(e) {
+    setStatus('❌ Invalid JSON: ' + e.message);
+  }
+}
+
+function setStatus(msg) {
+  var el = document.getElementById('parse-status');
+  if(el) el.textContent = msg;
+}
+
+function renderSimList() {
+  var wrap = document.getElementById('sim-list-wrap');
+  var list = document.getElementById('sim-list');
+  if (loadedSims.length === 0) { wrap.style.display='none'; return; }
+  wrap.style.display = 'block';
+  list.innerHTML = '';
+  loadedSims.forEach(function(sim, i) {
+    var el = document.createElement('div');
+    el.className = 'sim-item' + (activeSim === sim ? ' active' : '');
+    el.innerHTML =
+      '<div style="flex:1" onclick="activateSim('+i+')">' +
+        '<div class="sim-item-name">'+sim.name+'</div>' +
+        '<div class="sim-item-sub">'+sim.stages.length+' stages</div>' +
+      '</div>' +
+      '<button class="sim-item-del" onclick="removeSim('+i+')">✕</button>';
+    list.appendChild(el);
+  });
+}
+
+function removeSim(i) {
+  if (activeSim === loadedSims[i]) {
+    activeSim = null; simIdx = 0;
+    document.getElementById('sim-stage-card').style.display = 'none';
+  }
+  loadedSims.splice(i, 1);
+  renderSimList();
+  if (loadedSims.length === 0) setStatus('');
+}
+
+function activateSim(i) {
+  activeSim = loadedSims[i];
+  simIdx = 0;
+  renderSimList();
+  document.getElementById('sim-stage-card').style.display = 'flex';
+  document.getElementById('sim-nav').style.display = 'flex';
+  renderStage();
+  applyStage();
+}
+
+function renderStage() {
+  if (!activeSim) return;
+  try {
+    var stage = activeSim.stages[simIdx];
+    var total = activeSim.stages.length;
+    var g = function(id){ return document.getElementById(id); };
+    g('sim-active-name').textContent = activeSim.name;
+    g('sim-stage-name').textContent = stage.name || ('Stage '+(simIdx+1));
+    g('sim-stage-num').textContent = (simIdx+1)+' / '+total;
+    g('sim-stage-desc').textContent = stage.desc || '';
+    g('sim-stage-changes').textContent = stage.changes || '';
+    var actEl = g('sim-stage-actions');
+    if (stage.actions && stage.actions.trim()) {
+      g('sim-action-text').textContent = stage.actions;
+      g('sim-action-check').style.display = 'none';
+      actEl.style.display = 'block';
+      actEl.style.color = '#3a7a3a';
+    } else {
+      actEl.style.display = 'none';
+    }
+    var btn = g('next-btn');
+    if (simIdx >= total - 1) {
+      btn.textContent = '✓ SIM COMPLETE';
+      btn.style.background = '#001a1a';
+      btn.style.color = '#00aaaa';
+      btn.style.borderColor = '#004444';
+    } else {
+      btn.textContent = 'NEXT STAGE ▶  ('+(simIdx+2)+'/'+total+')';
+      btn.style.background = '#001800';
+      btn.style.color = '#00e676';
+      btn.style.borderColor = '#1e4a1e';
+    }
+  } catch(err) { console.error('renderStage:', err); }
+}
+
+function markActionDone() {
+  document.getElementById('sim-action-check').style.display = 'block';
+  document.getElementById('sim-stage-actions').style.color = '#2a5a2a';
+  setTimeout(function() {
+    if (activeSim && simIdx < activeSim.stages.length - 1) simStep(1);
+  }, 1200);
+}
+
+function applyStage() {
+  if (!activeSim) return;
+  try {
+    var stage = activeSim.stages[simIdx];
+    if (stage.vitals && typeof stage.vitals === 'object') {
+      var v = {};
+      Object.keys(stage.vitals).forEach(function(k){
+        if (stage.vitals[k] !== null && stage.vitals[k] !== undefined) v[k]=stage.vitals[k];
+      });
+      if (Object.keys(v).length) {
+        send({type:'update', data:v});
+        if(v.hr!==undefined){var sl=document.getElementById('sl-hr');if(sl)sl.value=v.hr;document.getElementById('lhr').textContent=v.hr;}
+        if(v.sbp!==undefined){document.getElementById('sl-sbp').value=v.sbp;}
+        if(v.dbp!==undefined){document.getElementById('sl-dbp').value=v.dbp;}
+        if(v.sbp!==undefined||v.dbp!==undefined){document.getElementById('lbp').textContent=(v.sbp||document.getElementById('sl-sbp').value)+'/'+(v.dbp||document.getElementById('sl-dbp').value);}
+        if(v.spo2!==undefined){document.getElementById('sl-spo2').value=v.spo2;document.getElementById('lsp').textContent=v.spo2+'%';}
+        if(v.etco2!==undefined){document.getElementById('sl-etco2').value=v.etco2;document.getElementById('lco2').textContent=v.etco2;}
+        if(v.rr!==undefined){document.getElementById('sl-rr').value=v.rr;document.getElementById('lrr').textContent=v.rr;}
+        if(v.rhythm!==undefined){document.querySelectorAll('.pill').forEach(function(p){p.classList.toggle('active',p.textContent===v.rhythm);});}
+      }
+    }
+    if (stage.vent && typeof stage.vent === 'object') {
+      var vt = Object.assign({}, stage.vent);
+      var path = vt.ventPath; delete vt.ventPath;
+      if (Object.keys(vt).length) {
+        send({type:'update', data:vt});
+        Object.keys(vt).forEach(function(k){ if(VS[k]!==undefined) VS[k]=vt[k]; });
+        refreshVentUI();
+      }
+      if (path) { send({type:'ventPath', path:path}); sendHaptic(path); }
+    }
+    toast('▶ '+(activeSim.stages[simIdx].name||'Stage '+(simIdx+1)));
+  } catch(err) { console.error('applyStage:', err); setStatus('⚠️ '+err.message); }
+}
+
+function simStep(dir) {
+  if (!activeSim) return;
+  var newIdx = Math.max(0, Math.min(activeSim.stages.length-1, simIdx+dir));
+  simIdx = newIdx;
+  renderStage();
+  applyStage();
+}
+
+function toggleAuto() {
+  var btn = document.getElementById('sim-auto');
+  if (autoTick) {
+    clearInterval(autoTick); autoTick=null;
+    btn.textContent='⏱ AUTO'; btn.classList.remove('on');
+    document.getElementById('sim-timer').textContent=''; return;
+  }
+  if (!activeSim) { toast('Load a simulation first'); return; }
+  btn.classList.add('on');
+  autoCountdown=autoInterval;
+  document.getElementById('sim-timer').textContent='Auto-advance in '+autoCountdown+'s';
+  autoTick=setInterval(function(){
+    autoCountdown--;
+    document.getElementById('sim-timer').textContent='Auto-advance in '+autoCountdown+'s';
+    if(autoCountdown<=0){
+      if(simIdx<activeSim.stages.length-1){simStep(1);autoCountdown=autoInterval;}
+      else{clearInterval(autoTick);autoTick=null;btn.textContent='⏱ AUTO';btn.classList.remove('on');document.getElementById('sim-timer').textContent='Simulation complete.';}
+    }
+  },1000);
+}
+
+// ── HAPTICLUNG Mk.5 ──────────────────────────────────────────────────────────
+var hapticWS = null;
+var hapticEnabled = false;
+var hapticReconnTimer = null;
+var HAPTIC_URL = 'ws://172.20.10.6:8765';
+
+var hapticAngles = {
+  normal:0, bronchospasm:55, mucus_plug:40, laryngospasm:85,
+  mainstem:30, pneumothorax:20, ards:0, apnea:0,
+  pulm_edema:25, air_embolism:0, co2_absorber:0, disconnect:0
+};
+
+function hapticSetStatus(dot, text, btnText, btnColor){
+  var d=document.getElementById('hl-dot');
+  var s=document.getElementById('hl-status');
+  var b=document.getElementById('hl-btn');
+  if(d)d.style.background=dot;
+  if(s)s.textContent=text;
+  if(b){b.textContent=btnText;b.style.color=btnColor;b.style.borderColor=btnColor==='#ffd740'?'#3a3000':btnColor==='#00e676'?'#1e4a1e':'#333';}
+}
+
+function connectHaptic(){
+  if(!hapticEnabled)return;
+  if(hapticWS){try{hapticWS.close();}catch(e){}hapticWS=null;}
+  var ip = document.getElementById('hl-ip').value.trim() || '172.20.10.6';
+  HAPTIC_URL = 'ws://' + ip + ':8765';
+  hapticSetStatus('#ffd740','Connecting…','DISABLE','#ffd740');
+  try{
+    hapticWS=new WebSocket(HAPTIC_URL);
+    hapticWS.onopen=function(){
+      hapticSetStatus('#00e676','HapticLung connected ✓','DISABLE','#00e676');
+      if(hapticReconnTimer){clearTimeout(hapticReconnTimer);hapticReconnTimer=null;}
+    };
+    hapticWS.onclose=function(){
+      hapticWS=null;
+      if(hapticEnabled){
+        hapticSetStatus('#ff4444','Lost connection — retrying…','DISABLE','#ff4444');
+        hapticReconnTimer=setTimeout(connectHaptic,3000);
+      }
+    };
+    hapticWS.onerror=function(){hapticWS=null;};
+  }catch(e){
+    hapticSetStatus('#333','Off — tap to enable','ENABLE','#666');
+    hapticEnabled=false;
+  }
+}
+
+function disconnectHaptic(){
+  hapticEnabled=false;
+  if(hapticReconnTimer){clearTimeout(hapticReconnTimer);hapticReconnTimer=null;}
+  if(hapticWS){try{hapticWS.close();}catch(e){}hapticWS=null;}
+  hapticSetStatus('#333','Off — tap to enable','ENABLE','#666');
+}
+
+function toggleHaptic(){
+  if(hapticEnabled){disconnectHaptic();}
+  else{hapticEnabled=true;connectHaptic();}
+}
+
+function sendHaptic(path) {
+    // 1. Check if the motor connection is actually open
+    if (!hapticWS || hapticWS.readyState !== 1) {
+        console.log("Motor not connected yet.");
+        return;
+    }
+
+    // 2. Get the angle from your list (hapticAngles)
+    var angle = hapticAngles[path];
+    if (angle === undefined) angle = 0;
+
+    // 3. SEND THE DATA
+    try {
+        // We send a simple "angle" key which the Arduino is already listening for
+        hapticWS.send(JSON.stringify({
+            "angle": angle,
+            "path": path
+        }));
+        console.log("Sent to motor: " + path + " at " + angle + " degrees");
+    } catch (e) {
+        console.error("Failed to send to motor:", e);
+    }
+}
+
+// ── HIDDEN PATIENT PHYSIOLOGY ─────────────────────────────────────────────────
+var lastState = null;
+
+function setSpontRR(v) {
+  var rr = parseInt(v)||0;
+  send({type:'spontRR', rr:rr});
+  VS.rr = rr;
+}
+
+refreshVentUI();
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function ulbl(id,v,sfx){document.getElementById(id).textContent=v+(sfx||'');}
+function ubp(){document.getElementById('lbp').textContent=document.getElementById('sl-sbp').value+'/'+document.getElementById('sl-dbp').value;}
+
+var _prevLevelVal=120;
+function bpLevelChange(newVal){
+  newVal=Number(newVal);
+  var delta=newVal-_prevLevelVal;
+  _prevLevelVal=newVal;
+  var curSbp=Number(document.getElementById('sl-sbp').value);
+  var curDbp=Number(document.getElementById('sl-dbp').value);
+  var newSbp=Math.max(0,Math.min(280,curSbp+delta));
+  var newDbp=Math.max(0,Math.min(180,curDbp+delta));
+  document.getElementById('sl-sbp').value=newSbp;
+  document.getElementById('sl-dbp').value=newDbp;
+  document.getElementById('lbplevel').textContent=Math.round(newSbp)+'/'+Math.round(newDbp);
+  ubp();
+  send({type:'update',data:{sbp:newSbp,dbp:newDbp}});
+}
+function utmp(v){document.getElementById('ltmp').textContent=((+v-32)*5/9).toFixed(1)+'°C';}
+var tt;
+function toast(msg){var el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){el.classList.remove('show');},2000);}
+</script>
+</body>
+</html>
